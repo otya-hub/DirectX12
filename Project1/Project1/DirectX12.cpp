@@ -2,7 +2,8 @@
 #include <d3d12.h>   // Directx12 本体を利用するためのヘッダ
 #include <dxgi1_4.h> // Windows グラフィックス基盤機能を利用するためのヘッダ
 
-void EnableDebugLayer()
+
+void EnableDebugLayer() // 1.デバッグレイヤーの有効化
 {
 #if defined(_DEBUG)
 	// デバッグインターフェースを取得
@@ -20,7 +21,6 @@ void EnableDebugLayer()
 			debugController1->Release(); // 設定後な不要なので解放
 		}
 
-		debugController->Release(); // 設定後は不要なので解放
 		debugController->Release(); // 設定後は不要なので解放
 	}
 #endif
@@ -43,7 +43,7 @@ IDXGIFactory4* CreateFactory()
 		return nullptr;
 	}
 	return factory;
-	factory->Release();
+	
 }
 
 IDXGIAdapter1* GetHardwareAdapter(IDXGIFactory4* factory)
@@ -77,6 +77,7 @@ IDXGIAdapter1* GetHardwareAdapter(IDXGIFactory4* factory)
 		}
 
 		adapter->Release();
+		
 	}
 	return nullptr;
 }
@@ -116,7 +117,7 @@ ID3D12Device* CreateD3D12Device(IDXGIFactory4* factory, IDXGIAdapter1* adapter)
 		OutputDebugStringA("Using WARP adapter\n");
 	}
 	return device;
-	device->Release();
+	
 }
 
 ID3D12CommandQueue* CreateCommandQueue(ID3D12Device* device)
@@ -130,7 +131,6 @@ ID3D12CommandQueue* CreateCommandQueue(ID3D12Device* device)
 
 	ID3D12CommandQueue* commandQueue = nullptr;
 	HRESULT hr = device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue));
-	device->Release();
 
 	if (FAILED(hr))
 	{
@@ -142,7 +142,7 @@ ID3D12CommandQueue* CreateCommandQueue(ID3D12Device* device)
 	commandQueue->SetName(L"Main Command Queue");   // SetName は常にワイド文字列を受け取るため L を付ける
 
 	return commandQueue;
-	commandQueue->Release();
+	
 }
 
 IDXGISwapChain3* CreateSwapChain(IDXGIFactory4* factory, ID3D12CommandQueue* commandQueue, HWND hwnd)
@@ -166,8 +166,6 @@ IDXGISwapChain3* CreateSwapChain(IDXGIFactory4* factory, ID3D12CommandQueue* com
 		nullptr,        // 出力制限
 		&swapChain1     // 作成されるスワップチェーン
 	);
-	factory->Release();
-	commandQueue->Release();
 
 	if (FAILED(hr))
 	{
@@ -185,6 +183,7 @@ IDXGISwapChain3* CreateSwapChain(IDXGIFactory4* factory, ID3D12CommandQueue* com
 		OutputDebugStringA("Failed to cast to SwapChain3\n");
 		return nullptr;
 	}
+
 	return swapChain;
-	swapChain->Release();
+	
 }
