@@ -1,5 +1,5 @@
 #include "main.h"
-#include <Windows.h>
+#include <Windows.h> // WinMain ‚ðŽg‚¤‚½‚ß‚Ìƒwƒbƒ_
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
