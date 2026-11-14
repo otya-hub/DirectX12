@@ -87,6 +87,8 @@ ID3D12Device* CreateD3D12Device(IDXGIFactory4* factory, IDXGIAdapter1* adapter)
 	ID3D12Device* device = nullptr;
 	HRESULT hr = E_FAIL;
 
+	
+
 	// ハードウェアアダプターでデバイス作成を試行
 	if (adapter != nullptr)
 	{
@@ -177,6 +179,8 @@ IDXGISwapChain3* CreateSwapChain(IDXGIFactory4* factory, ID3D12CommandQueue* com
 	IDXGISwapChain3* swapChain = nullptr;
 	hr = swapChain1->QueryInterface(IID_PPV_ARGS(&swapChain));
 	swapChain1->Release();
+
+
 	
 	if (FAILED(hr))
 	{
@@ -187,3 +191,113 @@ IDXGISwapChain3* CreateSwapChain(IDXGIFactory4* factory, ID3D12CommandQueue* com
 	return swapChain;
 	
 }
+
+/*// ディスクリプターヒープの作成例
+	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+	rtvHeapDesc.NumDescriptors = 2; // スワップチェーンのバッファ数
+	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE; // RTV用はシェーダから参照しない
+
+	ID3D12DescriptorHeap* rtvHeap;
+	device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap));
+
+	// RTVハンドルの取得例
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+	UINT rtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+	// 2番目のRTVハンドルの計算
+	rtvHandle.ptr += rtvDescriptorSize;
+
+	// レンダーターゲット作成例
+	ID3D12Resource* renderTaegets[2]; // スワップチェーンでバッファが二つあるのでダブルバッファで
+
+	for (int i = 0; i < 2; i++)
+	{
+		// スワップチェーンからバッファを取得
+		swapChain->GetBuffer(i, IID_PPV_ARGS(&renderTaegets[i]));
+
+		// RTVの作成
+		device->CreateRenderTargetView(renderTaegets[i], nullptr, rtvHandle);
+	}
+
+	// コマンドアロケータ作成例
+	ID3D12CommandAllocator* commandAllocators[2];
+
+	for (int i = 0; i < 2; i++)
+	{
+		device->CreateCommandAllocator(
+			D3D12_COMMAND_LIST_TYPE_DIRECT,
+			IID_PPV_ARGS(&commandAllocators[i])
+		);
+	}
+
+	// コマンドリスト作成例
+	ID3D12GraphicsCommandList* commandList;
+	device->CreateCommandList(
+		0,
+		D3D12_COMMAND_LIST_TYPE_DIRECT,
+		commandAllocators[0],  // 作成時は先頭のアロケータを指定
+		nullptr,
+		IID_PPV_ARGS(&commandList)
+	);
+
+	// 初期状態でクローズしておく
+	commandList->Close();
+
+	// 現在のバックバッファインデックスを取得
+	UINT currentBackBuffer = SwapChain->GetCurrentBackBufferIndex();
+
+	// ※ アロケータのリセット前に、子のアロケータを使ったコマンドの
+	//    GPU 実行完了をフェンスで待機しておくこと(後述)
+	// コマンドアロケータとコマンドリストをリセット
+	commandAllocators[currentBackBuffer]->Reset();
+	commandList->Reset(commandAllocators[currentBackBuffer], nullptr);
+
+	// レンダーターゲットを「絵を描く状態」に変更する（リソースバリア）
+	D3D12_RESOURCE_BARRIER barrier = {};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource = renderTaegets[currentBackBuffer];
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	commandList->ResourceBarrier(1, &barrier);
+
+	// レンダーターゲットの取得
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+	rtvHandle.ptr += currentBackBuffer * rtvDescriptorSize;
+
+	// 画面クリア（青色）
+	float clearColor[] = { 0.0f, 0.0f, 1.0f, 1.0f };
+	commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+
+	// レンダーターゲットを「絵を出す状態」に変更する（リソースバリア）
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+	commandList->Close();
+
+	// ここまでやって「画面をクリアする」のコマンドリストが完成する
+
+	// 「画面をクリアする」コマンドリストを実行 → GPU が記録内容の実行を開始する
+	commandQueue->ExecuteCommandLists(1, (ID3D12CommandList**)&commandList);
+
+	// フェンスの生成例
+	ID3D12Fence* fence;
+	UINT64 fenceValue = 0;
+	HANDLE fenceEvent;
+
+	// フェンスの生成
+	device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+	// フェンスイベントの生成
+	fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+
+	// GPU で行われているコマンドリストの処理が全て終わったら 1 になるように設定する
+	fenceValue = 1;
+	commandQueue->Signal(fence, fenceValue);
+
+	// まだ 1 になっていない（GPU処理が終わっていない）
+	if (fence->GetCompletedValue() < fenceValue)
+	{
+		// フェンス値が 1 に達したら fenceEvent をシグナル状態にする
+		fence->SetEventOnCompletion(fenceValue, fenceEvent);
+		// fenceEvent がシグナル状態になるまで CPU を止める
+		WaitForSingleObject(fenceEvent, INFINITE);
+	}*/
